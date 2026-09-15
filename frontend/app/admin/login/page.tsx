@@ -1,0 +1,101 @@
+"use client";
+
+import React, { FormEvent, useState } from "react";
+import { LockKeyhole, ShieldCheck, ArrowRight, Terminal } from "lucide-react";
+import { api } from "@/lib/api";
+import { Navbar } from "@/components/Navbar";
+import { MotionDiv, Badge } from "@/components/ui";
+import { useRouter } from "next/navigation";
+
+export default function AdminLogin() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      router.push("/admin");
+    } catch (err: any) {
+      setError(err.message || "Invalid credentials");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background">
+      <Navbar admin />
+      <main className="flex-1 flex items-center justify-center p-4">
+        <MotionDiv className="w-full max-w-md glass-card rounded-3xl p-8 sm:p-10 space-y-6 border border-white/10 shadow-2xl">
+          <div className="space-y-2">
+            <Badge variant="cyan">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              ORGANIZER ACCESS
+            </Badge>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">
+              Control Room Login
+            </h1>
+            <p className="text-xs text-neutral-400">
+              Manage teams, physical checkpoints, puzzle bank assignments, timing, and public results.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono text-neutral-400 uppercase tracking-wider mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
+                className="w-full px-4 py-3 rounded-xl bg-surface-100 border border-border text-white text-sm outline-none focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20 font-mono transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono text-neutral-400 uppercase tracking-wider mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full px-4 py-3 rounded-xl bg-surface-100 border border-border text-white text-sm outline-none focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20 font-mono transition-all"
+              />
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-xl bg-brand-rose/10 border border-brand-rose/20 text-rose-300 text-xs flex items-center gap-2">
+                <LockKeyhole className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={busy || !username || !password}
+              className="w-full gradient-brand-btn py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold disabled:opacity-50 transition-all mt-2"
+            >
+              <span>{busy ? "Authenticating..." : "Enter Command Center"}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+        </MotionDiv>
+      </main>
+    </div>
+  );
+}

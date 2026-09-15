@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ game_name }}</title><link rel="stylesheet" href="/static/app.css"></head>
+<body data-page="player">
+<div class="noise"></div><div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div>
+<header class="topbar"><div class="brand"><div class="brand-mark">C</div><div><strong>CODECHEF</strong><span>SCAVENGER HUNT 2.0</span></div></div><div id="game-pill" class="pill">CONNECTING…</div></header>
+<main class="wrap">
+<section id="landing" class="hero-panel">
+  <div class="eyebrow">CAMPUS CODE • FIND • SOLVE • RUN</div>
+  <h1>Scavenger Hunt <span>2.0</span></h1>
+  <p class="sub">Crack the program. Decode the clue. Reach the next checkpoint. One wrong QR and your team is out.</p>
+  <div class="join-grid">
+    <div class="card glass"><div class="card-title">Join your team</div><label>Team code</label><input id="team-code" maxlength="6" placeholder="X7K4P9" autocomplete="off"><label>Your name</label><input id="player-name" maxlength="80" placeholder="Your full name" autocomplete="name"><button class="primary" id="join-btn">Join team <span>→</span></button><div id="join-msg" class="msg"></div></div>
+    <div class="card glass rules"><div class="card-title">Hunt rules</div><div class="rule"><b>10</b><span>checkpoints to complete</span></div><div class="rule"><b>1–3</b><span>players per team</span></div><div class="rule"><b>+1</b><span>for each correct checkpoint</span></div><div class="rule danger"><b>×</b><span>wrong QR = instant disqualification</span></div><div class="rule"><b>IST</b><span>server time decides the clock</span></div></div>
+  </div>
+</section>
+<section id="lobby" class="hidden">
+  <div class="section-head"><div><div class="eyebrow">TEAM LOBBY</div><h2 id="team-name"></h2></div><div class="team-code" id="my-team-code"></div></div>
+  <div class="dashboard-grid"><div class="stat-card"><span>Players</span><strong id="member-count">—</strong></div><div class="stat-card"><span>Progress</span><strong id="progress">0 / 10</strong></div><div class="stat-card"><span>Score</span><strong id="score">0</strong></div><div class="stat-card"><span>Time left</span><strong id="timer">—</strong></div></div>
+  <div class="game-card glass" id="prestart"><div class="orb">⌁</div><h3>Stand by.</h3><p>The hunt begins at the official server time. Your first destination will be revealed when the game goes live.</p><div class="big-time" id="start-countdown">—</div></div>
+  <div class="game-card glass hidden" id="active-game"><div class="checkpoint-banner"><div><span>YOUR CURRENT DESTINATION</span><strong id="next-location">—</strong></div><div class="score-badge"><span>POINTS</span><b id="score2">0</b></div></div><div id="scanner-section" class="scanner-section"><button class="primary huge" id="scan-btn">Scan checkpoint QR <span>⌁</span></button><p class="muted">Only scan the checkpoint you were assigned. Scanning another location permanently disqualifies the team.</p><div id="reader" class="reader hidden"></div></div><div id="puzzle-section" class="hidden"><div class="code-meta"><span id="puzzle-difficulty" class="chip">HARD</span><span id="puzzle-language" class="chip">PYTHON</span></div><h3 id="puzzle-title">Checkpoint puzzle</h3><pre id="puzzle-code" class="code-box"></pre><div class="answer-row"><input id="answer" placeholder="Enter the clue you decoded"><button class="primary" id="answer-btn">Submit answer</button></div><div class="hint-row"><button class="ghost" id="hint1">Hint 1</button><button class="ghost" id="hint2">Hint 2</button></div><div id="answer-msg" class="msg"></div></div></div>
+  <div id="disqualified" class="game-card danger-card hidden"><div class="big-x">×</div><h3>TEAM DISQUALIFIED</h3><p id="disq-reason"></p></div>
+  <div id="ended" class="game-card glass hidden"><div class="orb">✓</div><h3>Game ended.</h3><p id="ended-copy">Please return to the same room where you started and wait there for the results.</p></div>
+</section>
+<section id="results" class="hidden"><div class="section-head"><div><div class="eyebrow">FINAL RESULTS</div><h2>Hunt leaderboard</h2></div><div class="pill live-pill">OFFICIAL</div></div><div class="results-card glass"><div id="results-list"></div></div></section>
+</main>
+<footer><span>Scavenger Hunt 2.0</span><span>by CodeChef</span></footer>
+<script src="https://unpkg.com/html5-qrcode" defer></script><script src="/static/player.js" defer></script>
+</body></html>

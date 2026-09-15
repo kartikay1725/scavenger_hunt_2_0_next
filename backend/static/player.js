@@ -1,0 +1,30 @@
+let state=null, scanner=null, lastScanToken=null;
+const $=id=>document.getElementById(id);
+const fmt=s=>{s=Math.max(0,Math.floor(s));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`};
+const api=async(url,opt={})=>{const r=await fetch(url,{...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let j={};try{j=await r.json()}catch{};if(!r.ok&&j.error)return Promise.reject(j);return j};
+function show(id,yes=true){$(id).classList.toggle('hidden',!yes)}
+function msg(id,t){$(id).textContent=t||''}
+async function load(){try{const j=await api('/api/me');state=j;render(j)}catch(e){console.error(e)}}
+function render(j){
+ const g=j.game||{};$('game-pill').textContent=(g.status||'—').toUpperCase();
+ if(j.authenticated){show('landing',false);show('lobby',true);$('team-name').textContent=j.team.name;$('my-team-code').textContent=j.team.code;$('score').textContent=j.team.score;$('score2').textContent=j.team.score;$('progress').textContent=`${j.team.completed} / 10`;
+ const st=g.status; if(st==='LIVE'){show('prestart',false);show('active-game',j.team.status!=='DISQUALIFIED');show('disqualified',j.team.status==='DISQUALIFIED');show('ended',false);$('next-location').textContent=j.team.completed===0?('First destination: '+(j.team.next_location_name||'Follow your route')):'Next destination assigned — scan there to unlock the puzzle';
+ } else if(st==='ENDED'){show('prestart',false);show('active-game',false);show('ended',j.team.status!=='DISQUALIFIED');show('disqualified',j.team.status==='DISQUALIFIED');$('ended-copy').textContent=`Please return to ${g.starting_room||'the same room where you started'} and wait there for the results.`;
+ } else {show('prestart',true);show('active-game',false);show('ended',false);}
+ if(st==='LIVE'){const end=new Date(g.end_at);$('timer').textContent=fmt((end-Date.now())/1000);$('start-countdown').textContent=fmt((new Date(g.start_at)-Date.now())/1000)}else if(st==='READY'&&g.start_at){$('timer').textContent=fmt((new Date(g.start_at)-Date.now())/1000);$('start-countdown').textContent=fmt((new Date(g.start_at)-Date.now())/1000)}else $('timer').textContent='—';
+ $('member-count').textContent=j.team.members_count ?? '—';
+ }else{show('landing',true);show('lobby',false)}
+ if(g.results_published) loadResults();
+}
+async function join(){msg('join-msg','');try{const j=await api('/api/join',{method:'POST',body:JSON.stringify({team_code:$('team-code').value.trim(),name:$('player-name').value.trim()})});msg('join-msg',`Joined ${j.team.name}.`);await load()}catch(e){msg('join-msg',e.error||'Could not join team.')}}
+async function startScanner(){show('reader',true);if(scanner){return} if(typeof Html5Qrcode==='undefined'){msg('answer-msg','QR scanner library is still loading. Try again in a moment.');return}
+ scanner=new Html5Qrcode('reader');try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260}},async decoded=>{if(decoded===lastScanToken)return;lastScanToken=decoded;try{const u=new URL(decoded,location.origin);const token=u.searchParams.get('scan')||decoded;const j=await api('/api/scan',{method:'POST',body:JSON.stringify({qr_token:token})});if(scanner){await scanner.stop();scanner.clear();scanner=null}show('reader',false);showPuzzle(j.puzzle);msg('answer-msg',`Checkpoint verified: ${j.checkpoint.name}`)}catch(e){if(e.error==='TEAM_DISQUALIFIED'){await stopScanner();show('active-game',false);show('puzzle-section',false);show('disqualified',true);$('disq-reason').textContent=e.reason||'Wrong checkpoint scanned.'}else msg('answer-msg',e.error||'Scan rejected.')}} ,()=>{});}catch(e){msg('answer-msg','Camera could not start. Check camera permission.')}}
+async function stopScanner(){try{if(scanner){await scanner.stop();scanner.clear()}}catch{}scanner=null;show('reader',false)}
+function showPuzzle(p){if(!p)return;show('puzzle-section',true);$('puzzle-title').textContent=p.title||'Checkpoint puzzle';$('puzzle-code').textContent=p.code||'';$('puzzle-language').textContent=p.language;$('puzzle-difficulty').textContent=p.difficulty||'HARD';$('answer').value=''}
+async function submitAnswer(){try{const j=await api('/api/answer',{method:'POST',body:JSON.stringify({answer:$('answer').value})});if(j.correct){msg('answer-msg',j.finished?'✓ 10/10 — you finished the hunt!':'✓ Correct. +1 point.');show('puzzle-section',false);state.team.score=j.score;state.team.completed=j.completed;state.team.status=j.finished?'FINISHED':'LIVE';if(j.next_location_name)$('next-location').textContent=`Next destination: ${j.next_location_name}`;await load()}else msg('answer-msg',j.error||'Incorrect answer.')}catch(e){if(e.error==='GAME_ENDED')await load();else msg('answer-msg',e.error||'Could not submit answer.')}}
+async function hint(level){try{const j=await api('/api/hint',{method:'POST',body:JSON.stringify({level})});msg('answer-msg',`Hint ${level}: ${j.hint}`)}catch(e){msg('answer-msg',e.error||'Hint unavailable.')}}
+async function loadResults(){try{const j=await api('/api/results');if(!j.published){show('results',false);return}show('results',true);const el=$('results-list');el.innerHTML=j.results.map(r=>`<div class="result-row"><div class="rank">#${r.rank}</div><div class="team">${esc(r.team)}<br><small>${r.completed}/10 checkpoints</small></div><div>Score<br><b>${r.score}/10</b></div><div>Time<br><b>${r.final_result_seconds!=null?fmt(r.final_result_seconds):'—'}</b></div><div><span class="status ${r.status}">${r.status}</span></div></div>`).join('')}catch(e){}}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+$('join-btn').onclick=join;$('scan-btn').onclick=startScanner;$('answer-btn').onclick=submitAnswer;$('hint1').onclick=()=>hint(1);$('hint2').onclick=()=>hint(2);
+$('team-code').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase());
+setInterval(load,2500);setInterval(()=>{if(state?.game?.status==='LIVE'&&state.game.end_at)$('timer').textContent=fmt((new Date(state.game.end_at)-Date.now())/1000)},500);load();
