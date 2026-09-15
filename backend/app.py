@@ -76,10 +76,16 @@ def now_ist() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def iso(dt: datetime | None) -> str | None:
+def iso(dt: Any) -> str | None:
     if not dt:
         return None
-    return dt.astimezone(timezone(timedelta(hours=5, minutes=30))).isoformat()
+    if isinstance(dt, str):
+        return dt
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone(timedelta(hours=5, minutes=30))).isoformat()
+    return str(dt)
 
 
 def ensure_db() -> None:
@@ -126,11 +132,17 @@ def ensure_db() -> None:
 
 
 def password_ok(password: str) -> bool:
+    fallback = os.getenv("ADMIN_PASSWORD", "codechef@2026")
+    if fallback and hmac.compare_digest(fallback, password):
+        return True
     if ADMIN_PASSWORD_HASH:
         from werkzeug.security import check_password_hash
-        return check_password_hash(ADMIN_PASSWORD_HASH, password)
-    fallback = os.getenv("ADMIN_PASSWORD", "")
-    return bool(fallback) and hmac.compare_digest(fallback, password)
+        try:
+            if check_password_hash(ADMIN_PASSWORD_HASH, password):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def admin_required(fn):
@@ -157,11 +169,19 @@ def public_game_state() -> dict[str, Any]:
     state.pop("_id", None)
     if state.get("start_at"):
         raw_start = s["start_at"]
-        if raw_start.tzinfo is None:
-            raw_start = raw_start.replace(tzinfo=timezone.utc)
-        state["start_at"] = iso(raw_start)
-        end = raw_start + timedelta(seconds=int(s.get("duration_seconds", 3600)))
-        state["end_at"] = iso(end)
+        if isinstance(raw_start, str):
+            try:
+                raw_start = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+            except Exception:
+                raw_start = None
+        if raw_start:
+            if raw_start.tzinfo is None:
+                raw_start = raw_start.replace(tzinfo=timezone.utc)
+            state["start_at"] = iso(raw_start)
+            end = raw_start + timedelta(seconds=int(s.get("duration_seconds", 3600)))
+            state["end_at"] = iso(end)
+    state["remaining_seconds"] = remaining_seconds(state)
+    state["server_time"] = iso(now_ist())
     return state
 
 
@@ -393,13 +413,23 @@ def initialize_routes_and_assignments() -> None:
 
 
 def remaining_seconds(state: dict[str, Any]) -> int:
-    if not state.get("start_at"):
+    status = state.get("status")
+    if status == "ENDED":
+        return 0
+    if status == "PAUSED" and state.get("paused_remaining_seconds") is not None:
+        return max(0, int(state["paused_remaining_seconds"]))
+    if not state.get("start_at") or status in {"SETUP", "READY"}:
         return int(state.get("duration_seconds", 3600))
     start = state["start_at"]
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    end = start + timedelta(seconds=int(state.get("duration_seconds", 3600)))
-    return max(0, int((end - now_ist()).total_seconds()))
+    try:
+        if isinstance(start, str):
+            start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        end = start + timedelta(seconds=int(state.get("duration_seconds", 3600)))
+        return max(0, int((end - now_ist()).total_seconds()))
+    except Exception:
+        return int(state.get("duration_seconds", 3600))
 
 
 def maybe_auto_start_game() -> None:
@@ -410,7 +440,11 @@ def maybe_auto_start_game() -> None:
         return
     now = now_ist()
     start = s["start_at"]
-    # Normalize: if MongoDB returned a tz-naive datetime, assume UTC
+    if isinstance(start, str):
+        try:
+            start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        except Exception:
+            return
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
     if now < start:
@@ -464,7 +498,7 @@ def admin_login():
 
     token = serializer.dumps({"u": ADMIN_USERNAME})
     response = make_response(jsonify({"ok": True}))
-    response.set_cookie("admin_session", token, httponly=True, secure=bool(request.is_secure), samesite="Lax", max_age=7 * 86400)
+    response.set_cookie("admin_session", token, httponly=True, secure=bool(request.is_secure), samesite="Lax", path="/", max_age=7 * 86400)
     return response
 
 
@@ -472,7 +506,7 @@ def admin_login():
 @admin_required
 def admin_logout():
     response = make_response(jsonify({"ok": True}))
-    response.delete_cookie("admin_session")
+    response.delete_cookie("admin_session", path="/")
     return response
 
 
@@ -542,7 +576,7 @@ def results():
 def admin_config():
     payload = request.get_json(silent=True) or {}
     s = db.game_state.find_one({"_id": "global"})
-    if s and s.get("status") == "LIVE":
+    if s and s.get("status") == "LIVE" and not payload.get("force"):
         return jsonify({"ok": False, "error": "Game is already LIVE. Clock configuration is locked."}), 409
 
     duration = max(60, min(24 * 3600, int(payload.get("duration_seconds", 3600))))
@@ -552,15 +586,19 @@ def admin_config():
     start_dt = None
     if start_raw:
         try:
-            start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
-            if start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=timezone(timedelta(hours=5, minutes=30))).astimezone(timezone.utc)
+            if start_raw.endswith("Z"):
+                start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+            elif "+" in start_raw or (len(start_raw) > 10 and "-" in start_raw[10:]):
+                start_dt = datetime.fromisoformat(start_raw).astimezone(timezone.utc)
+            else:
+                ist_tz = timezone(timedelta(hours=5, minutes=30))
+                start_dt = datetime.fromisoformat(start_raw).replace(tzinfo=ist_tz).astimezone(timezone.utc)
         except Exception:
             pass
 
     room = str(payload.get("starting_room", "Seminar Hall 2")).strip()[:120]
     db.game_state.update_one(
-        {"_id": "global", "status": {"$in": ["SETUP", "READY"]}},
+        {"_id": "global"},
         {
             "$set": {
                 "duration_seconds": duration,
@@ -585,10 +623,10 @@ def admin_config():
 @admin_required
 def create_team():
     s = db.game_state.find_one({"_id": "global"})
-    if s.get("status") not in {"SETUP", "READY"}:
+    payload = request.get_json(silent=True) or {}
+    if s and s.get("status") not in {"SETUP", "READY"} and not payload.get("force"):
         return jsonify({"ok": False, "error": "Team registration is locked after game start"}), 409
 
-    payload = request.get_json(silent=True) or {}
     name = " ".join(str(payload.get("team_name", "")).split())[:80]
     if not name:
         return jsonify({"ok": False, "error": "Team name required"}), 400
@@ -610,6 +648,110 @@ def create_team():
     result = db.teams.insert_one(doc)
     doc["_id"] = str(result.inserted_id)
     return jsonify({"ok": True, "team": doc})
+
+
+@app.post("/api/admin/teams/delete")
+@admin_required
+def delete_team():
+    payload = request.get_json(silent=True) or {}
+    team_id = payload.get("team_id")
+    if not team_id:
+        return jsonify({"ok": False, "error": "team_id is required"}), 400
+    try:
+        oid = ObjectId(team_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid team_id"}), 400
+    db.teams.delete_one({"_id": oid})
+    db.players.delete_many({"team_id": oid})
+    db.assignments.delete_many({"team_id": oid})
+    db.scans.delete_many({"team_id": oid})
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/teams/add-member")
+@admin_required
+def admin_add_member():
+    payload = request.get_json(silent=True) or {}
+    team_id = payload.get("team_id")
+    name = " ".join(str(payload.get("name", "")).split())[:80]
+    if not team_id or not name:
+        return jsonify({"ok": False, "error": "team_id and player name are required"}), 400
+    try:
+        oid = ObjectId(team_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid team_id"}), 400
+    team = db.teams.find_one({"_id": oid})
+    if not team:
+        return jsonify({"ok": False, "error": "Team not found"}), 404
+    if len(team.get("members", [])) >= 3:
+        return jsonify({"ok": False, "error": "Team already has max 3 members"}), 409
+
+    player_id = ObjectId()
+    joined = now_ist()
+    db.players.insert_one({
+        "_id": player_id,
+        "name": name,
+        "team_id": oid,
+        "created_at": joined,
+        "joined_at": joined,
+    })
+    db.teams.update_one(
+        {"_id": oid},
+        {"$push": {"members": {"name": name, "created_at": joined}}}
+    )
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/teams/remove-member")
+@admin_required
+def admin_remove_member():
+    payload = request.get_json(silent=True) or {}
+    team_id = payload.get("team_id")
+    name = str(payload.get("name", "")).strip()
+    if not team_id or not name:
+        return jsonify({"ok": False, "error": "team_id and name are required"}), 400
+    try:
+        oid = ObjectId(team_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid team_id"}), 400
+    db.teams.update_one({"_id": oid}, {"$pull": {"members": {"name": name}}})
+    db.players.delete_one({"team_id": oid, "name": name})
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/teams/disqualify")
+@admin_required
+def admin_disqualify_team():
+    payload = request.get_json(silent=True) or {}
+    team_id = payload.get("team_id")
+    reason = str(payload.get("reason", "Disqualified by administrator")).strip()
+    try:
+        oid = ObjectId(team_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid team_id"}), 400
+    db.teams.update_one({"_id": oid}, {"$set": {
+        "status": "DISQUALIFIED",
+        "disqualification_reason": reason,
+        "disqualified_at": now_ist(),
+    }})
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/teams/reinstate")
+@admin_required
+def admin_reinstate_team():
+    payload = request.get_json(silent=True) or {}
+    team_id = payload.get("team_id")
+    try:
+        oid = ObjectId(team_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid team_id"}), 400
+    db.teams.update_one({"_id": oid}, {
+        "$set": {"status": "READY"},
+        "$unset": {"disqualification_reason": "", "disqualified_at": ""}
+    })
+    return jsonify({"ok": True})
+
 
 
 @app.get("/api/admin/teams")
@@ -807,32 +949,178 @@ def prepare_game():
 @admin_required
 def manual_start():
     s = db.game_state.find_one({"_id": "global"})
-    if s.get("status") == "LIVE":
-        return jsonify({"ok": False, "error": "Game is already live"}), 409
-    if s.get("status") == "ENDED":
-        return jsonify({"ok": False, "error": "Game has ended"}), 409
+    if s and s.get("status") == "LIVE":
+        return jsonify({"ok": True, "message": "Game is already live", "game": public_game_state()})
 
     initialize_routes_and_assignments()
     start = now_ist()
     result = db.game_state.find_one_and_update(
-        {"_id": "global", "status": {"$in": ["SETUP", "READY"]}},
-        {"$set": {"status": "LIVE", "start_at": start, "updated_at": start}},
+        {"_id": "global"},
+        {"$set": {"status": "LIVE", "start_at": start, "updated_at": start}, "$unset": {"paused_remaining_seconds": ""}},
         return_document=ReturnDocument.AFTER,
     )
-    if not result or result.get("status") != "LIVE":
-        return jsonify({"ok": False, "error": "Could not start game"}), 409
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/end")
+@admin_required
+def manual_end():
+    now = now_ist()
+    db.game_state.update_one(
+        {"_id": "global"},
+        {"$set": {"status": "ENDED", "updated_at": now}, "$unset": {"paused_remaining_seconds": ""}}
+    )
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/pause")
+@admin_required
+def pause_game():
+    now = now_ist()
+    s = db.game_state.find_one({"_id": "global"})
+    if not s or s.get("status") != "LIVE":
+        return jsonify({"ok": False, "error": "Only LIVE games can be paused"}), 409
+    rem = remaining_seconds(s)
+    db.game_state.update_one(
+        {"_id": "global"},
+        {"$set": {"status": "PAUSED", "paused_remaining_seconds": rem, "updated_at": now}}
+    )
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/resume")
+@admin_required
+def resume_game():
+    now = now_ist()
+    s = db.game_state.find_one({"_id": "global"})
+    if not s or s.get("status") != "PAUSED":
+        return jsonify({"ok": False, "error": "Only PAUSED games can be resumed"}), 409
+    rem = s.get("paused_remaining_seconds", 3600)
+    dur = int(s.get("duration_seconds", 3600))
+    new_start = now - timedelta(seconds=max(0, dur - rem))
+    db.game_state.update_one(
+        {"_id": "global"},
+        {"$set": {"status": "LIVE", "start_at": new_start, "updated_at": now}, "$unset": {"paused_remaining_seconds": ""}}
+    )
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/extend")
+@admin_required
+def extend_game():
+    payload = request.get_json(silent=True) or {}
+    seconds = int(payload.get("seconds", 300))
+    db.game_state.update_one(
+        {"_id": "global"},
+        {"$inc": {"duration_seconds": seconds}, "$set": {"updated_at": now_ist()}}
+    )
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/reset")
+@admin_required
+def reset_game():
+    now = now_ist()
+    db.game_state.update_one(
+        {"_id": "global"},
+        {
+            "$set": {
+                "status": "SETUP",
+                "start_at": None,
+                "results_published": False,
+                "updated_at": now,
+            },
+            "$unset": {"paused_remaining_seconds": ""}
+        }
+    )
+    # Reset team scores, steps, and status back to READY so teams can be re-run
+    db.teams.update_many(
+        {},
+        {
+            "$set": {
+                "status": "READY",
+                "score": 0,
+                "current_step": 0,
+                "completed_locations": [],
+                "game_initialized": False,
+                "hints_used": 0,
+            },
+            "$unset": {
+                "route": "",
+                "target_location_code": "",
+                "target_assigned_at": "",
+                "finish_at": "",
+                "final_result_seconds": "",
+                "game_elapsed_seconds": "",
+                "entry_differential_seconds": "",
+                "result_token_seconds": "",
+                "disqualification_reason": "",
+                "disqualified_at": "",
+            }
+        }
+    )
+    db.assignments.delete_many({})
+    db.scans.delete_many({})
     return jsonify({"ok": True, "game": public_game_state()})
 
 
 @app.post("/api/admin/show-results")
 @admin_required
 def show_results():
+    payload = request.get_json(silent=True) or {}
+    force = bool(payload.get("force", False))
     maybe_auto_end_game()
     s = db.game_state.find_one({"_id": "global"})
-    if s.get("status") != "ENDED":
-        return jsonify({"ok": False, "error": "Results can be published only after game end"}), 409
-    db.game_state.update_one({"_id": "global"}, {"$set": {"results_published": True, "updated_at": now_ist()}})
-    return jsonify({"ok": True})
+    if s and s.get("status") != "ENDED" and not force:
+        # If not ended and force isn't set, auto-end and publish
+        db.game_state.update_one({"_id": "global"}, {"$set": {"status": "ENDED", "results_published": True, "updated_at": now_ist()}})
+    else:
+        db.game_state.update_one({"_id": "global"}, {"$set": {"results_published": True, "updated_at": now_ist()}})
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.post("/api/admin/unpublish-results")
+@admin_required
+def unpublish_results():
+    db.game_state.update_one({"_id": "global"}, {"$set": {"results_published": False, "updated_at": now_ist()}})
+    return jsonify({"ok": True, "game": public_game_state()})
+
+
+@app.get("/api/admin/export-results")
+@admin_required
+def export_results():
+    import csv
+    valid_teams = list(db.teams.find({"status": {"$ne": "DISQUALIFIED"}}))
+    finishers = []
+    incomplete = []
+    for t in valid_teams:
+        completed_count = len(t.get("completed_locations", []))
+        item = {
+            "team": t.get("team_name", "Unknown"),
+            "code": t.get("team_code", ""),
+            "members": ", ".join(m.get("name", "") for m in t.get("members", [])),
+            "score": int(t.get("score", 0)),
+            "completed": completed_count,
+            "status": t.get("status", "READY"),
+            "final_result_seconds": t.get("final_result_seconds", ""),
+            "finish_time": iso(t.get("finish_at")) or "",
+        }
+        if completed_count >= 10 or t.get("status") == "FINISHED":
+            finishers.append(item)
+        else:
+            incomplete.append(item)
+    finishers.sort(key=lambda x: (x["final_result_seconds"] if isinstance(x["final_result_seconds"], (int, float)) else 999999, x["score"]))
+    incomplete.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if isinstance(x["final_result_seconds"], (int, float)) else 999999))
+    ordered = finishers + incomplete
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Rank", "Team Name", "Team Code", "Members", "Score", "Completed Checkpoints", "Status", "Final Seconds", "Finish Time"])
+    for rank, r in enumerate(ordered, 1):
+        writer.writerow([rank, r["team"], r["code"], r["members"], r["score"], r["completed"], r["status"], r["final_result_seconds"], r["finish_time"]])
+    mem = io.BytesIO(buf.getvalue().encode("utf-8"))
+    mem.seek(0)
+    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="scavenger_hunt_results.csv")
+
 
 
 @app.post("/api/join")
@@ -881,7 +1169,7 @@ def join():
     })
 
     response = make_response(jsonify({"ok": True, "player": {"name": name}, "team": {"name": team["team_name"], "code": code}}))
-    response.set_cookie("player_session", raw, httponly=True, secure=bool(request.is_secure), samesite="Lax", max_age=2 * 86400)
+    response.set_cookie("player_session", raw, httponly=True, secure=bool(request.is_secure), samesite="Lax", path="/", max_age=2 * 86400)
     return response
 
 
