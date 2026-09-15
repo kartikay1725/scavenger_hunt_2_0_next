@@ -85,6 +85,24 @@ export default function AdminLogin() {
               </div>
             )}
 
+            {/* Quick credentials hint */}
+            <div className="p-3 rounded-xl bg-surface-100/70 border border-white/5 flex items-center justify-between text-xs font-mono text-neutral-400">
+              <div className="flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-brand-cyan" />
+                <span>Default: <strong className="text-white">codechef</strong> / <strong className="text-white">codechef@2026</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("codechef");
+                  setPassword("codechef@2026");
+                }}
+                className="text-[11px] text-brand-cyan hover:underline"
+              >
+                Auto-fill
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={busy || !username || !password}
