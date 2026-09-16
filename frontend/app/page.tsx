@@ -105,17 +105,35 @@ export default function Home() {
 
   useEffect(() => {
     refresh();
-    // Poll every 3.5s so teammates see each other's progress and next locations quickly
-    const interval = setInterval(() => {
+
+    let timer: NodeJS.Timeout | null = null;
+
+    const scheduleNext = () => {
       setNow(Date.now());
-      const delay = Math.min(errorCountRef.current * 3000, 15000);
-      if (delay > 0) {
-        setTimeout(refresh, delay);
-      } else {
+      const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      const baseDelay = isHidden ? 25000 : 6000;
+      const errorBackoff = Math.min(errorCountRef.current * 3000, 15000);
+      const nextDelay = baseDelay + errorBackoff;
+
+      timer = setTimeout(() => {
+        refresh();
+        scheduleNext();
+      }, nextDelay);
+    };
+
+    scheduleNext();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
         refresh();
       }
-    }, 3500);
-    return () => clearInterval(interval);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
 
   const remaining = useMemo(() => {
