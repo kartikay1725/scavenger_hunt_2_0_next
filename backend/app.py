@@ -17,7 +17,7 @@ from bson import ObjectId
 from flask import Flask, jsonify, make_response, render_template, request, send_file
 from flask_cors import CORS
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
+from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument, UpdateOne
 import qrcode
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -52,7 +52,18 @@ try:
 except Exception:
     pass
 
-client = MongoClient(MONGO_URI, tlsCAFile=ca_file) if (MONGO_URI and ca_file) else (MongoClient(MONGO_URI) if MONGO_URI else None)
+try:
+    import dns.resolver
+    dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+    dns.resolver.default_resolver.nameservers = ['8.8.8.8', '1.1.1.1']
+except Exception:
+    pass
+
+client = (
+    MongoClient(MONGO_URI, tlsCAFile=ca_file, maxPoolSize=300, minPoolSize=10)
+    if (MONGO_URI and ca_file)
+    else (MongoClient(MONGO_URI, maxPoolSize=300, minPoolSize=10) if MONGO_URI else None)
+)
 db = client[DB_NAME] if client is not None else None
 _db_initialized = False
 
@@ -64,7 +75,7 @@ LOCATIONS = [
     {"code": "LOC-04", "name": "Stationary"},
     {"code": "LOC-05", "name": "Gym"},
     {"code": "LOC-06", "name": "Green Circle — IMR Wala Garden"},
-    {"code": "LOC-07", "name": "Guard Wale Uncle"},
+    {"code": "LOC-07", "name": "Guard Main Gate"},
     {"code": "LOC-08", "name": "Saraswati Mata Murti — A Block"},
     {"code": "LOC-09", "name": "Book Bank"},
     {"code": "LOC-10", "name": "F Block Hawamahal"},
@@ -122,7 +133,7 @@ def ensure_db() -> None:
                 db.checkpoints.insert_one({
                     "location_code": loc["code"],
                     "location_name": loc["name"],
-                    "qr_token": f"SHT2|{loc['code']}|{secrets.token_urlsafe(12)}",
+                    "qr_token": f"SHT2_{secrets.token_urlsafe(20)}",
                     "created_at": now_ist(),
                 })
         _db_initialized = True
@@ -216,22 +227,125 @@ def normalize_answer(x: str) -> str:
     return " ".join((x or "").strip().lower().replace("-", " ").replace("_", " ").split())
 
 
-def select_unique_puzzle(team_id: ObjectId, location_code: str) -> dict[str, Any]:
-    # Ensure no two teams receive the same question at this physical location.
-    assigned_keys = {x["puzzle_key"] for x in db.assignments.find({"location_code": location_code}, {"puzzle_key": 1})}
-    candidates = list(db.puzzles.find({"location_code": location_code, "puzzle_key": {"$nin": list(assigned_keys)}}))
+def select_unique_puzzle(team_id: ObjectId, target_location_code: str) -> dict[str, Any]:
+    # Ensure no two teams receive the same question for this target location.
+    assigned_keys = {x["puzzle_key"] for x in db.assignments.find({"target_next_code": target_location_code}, {"puzzle_key": 1})}
+    candidates = list(db.puzzles.find({"location_code": target_location_code, "puzzle_key": {"$nin": list(assigned_keys)}}))
     if candidates:
         return secrets.choice(candidates)
 
-    # Fallback to any puzzle at this location if all uniquely exhausted
-    all_candidates = list(db.puzzles.find({"location_code": location_code}))
+    # Fallback to any puzzle for this target location if all uniquely exhausted
+    all_candidates = list(db.puzzles.find({"location_code": target_location_code}))
     if all_candidates:
         return secrets.choice(all_candidates)
 
     # Deterministic fallback generator if database had 0 puzzles for this location
-    seed_text = hashlib.sha256(f"{team_id}:{location_code}:{secrets.token_hex(8)}".encode()).hexdigest()
+    seed_text = hashlib.sha256(f"{team_id}:{target_location_code}:{secrets.token_hex(8)}".encode()).hexdigest()
     seed = int(seed_text[:12], 16)
-    return generate_variant_puzzle(location_code, seed)
+    return generate_variant_puzzle(target_location_code, seed)
+
+
+def generate_finish_puzzle(starting_room: str, seed: int) -> dict[str, Any]:
+    clue = f"FINISH AT {starting_room.upper()}".strip()
+    answer = starting_room
+    shift = seed % 19 + 5
+    mask = seed % 13 + 2
+    n = len(clue)
+    order = list(range(n))
+    state = seed % 2147483647 or 1
+    for i in range(n - 1, 0, -1):
+        state = (state * 48271) % 2147483647
+        j = state % (i + 1)
+        order[i], order[j] = order[j], order[i]
+    encoded = [((ord(ch) + shift + mask) % 256) for ch in clue]
+    scrambled = [encoded[i] for i in order]
+    language = "Python" if seed % 2 == 0 else "C++"
+
+    if language == "Python":
+        code = "\n".join([
+            "# Scavenger Hunt 2.0 — Final Victory Checkpoint Challenge",
+            "# Decode the program output to find where the hunt officially concludes.",
+            f"DATA = {scrambled!r}",
+            f"ORDER = {order!r}",
+            f"SHIFT = {shift}",
+            f"MASK = {mask}",
+            "NOISE = [3, 1, 4, 1, 5, 9, 2, 6]",
+            "",
+            "def fold(values):",
+            "    result = []",
+            "    for index, value in enumerate(values):",
+            "        noise = NOISE[index % len(NOISE)]",
+            "        result.append((value + noise) % 256)",
+            "    return result",
+            "",
+            "def unshuffle(values, positions):",
+            "    restored = [0] * len(values)",
+            "    for scrambled_index, original_index in enumerate(positions):",
+            "        restored[original_index] = values[scrambled_index]",
+            "    return restored",
+            "",
+            "def decode(values):",
+            "    chars = []",
+            "    for value in values:",
+            "        value = (value - MASK) % 256",
+            "        value = (value - SHIFT) % 256",
+            "        chars.append(chr(value))",
+            "    return ''.join(chars)",
+            "",
+            "shadow = fold(DATA)",
+            "shadow = [(x - NOISE[i % len(NOISE)]) % 256 for i, x in enumerate(shadow)]",
+            "restored = unshuffle(shadow, ORDER)",
+            "answer = decode(restored)",
+            "print(answer)",
+        ])
+    else:
+        data = ", ".join(map(str, scrambled))
+        ords = ", ".join(map(str, order))
+        code = "\n".join([
+            "// Scavenger Hunt 2.0 — Final Victory Checkpoint Challenge",
+            "#include <iostream>",
+            "#include <vector>",
+            "#include <string>",
+            "using namespace std;",
+            "",
+            f"vector<int> DATA = {{{data}}};",
+            f"vector<int> ORDER = {{{ords}}};",
+            f"int SHIFT = {shift};",
+            f"int MASK = {mask};",
+            "int main() {",
+            "    vector<int> restored(DATA.size(), 0);",
+            "    for (size_t i = 0; i < DATA.size(); ++i) restored[ORDER[i]] = DATA[i];",
+            "    string answer;",
+            "    for (int x : restored) answer.push_back(static_cast<char>((x - MASK - SHIFT + 512) % 256));",
+            "    cout << answer << endl;",
+            "    return 0;",
+            "}",
+        ])
+
+    accepted = list({
+        normalize_answer(clue),
+        normalize_answer(answer),
+        normalize_answer("seminar hall 2"),
+        normalize_answer("seminar hall"),
+        normalize_answer("seminarhall2"),
+        normalize_answer("seminarhall 2"),
+    })
+
+    return {
+        "puzzle_key": f"GEN-FINISH-{seed:012x}",
+        "location_code": "FINISH",
+        "language": language,
+        "title": "Final Checkpoint — Victory Code Challenge",
+        "code": code,
+        "answer": starting_room,
+        "accepted_answers": accepted,
+        "hint1": "All 10 physical checkpoints cleared! The code reveals where the hunt concludes.",
+        "hint2": f"Return to {starting_room} to register your final time.",
+        "difficulty": "Hard",
+        "generated": True,
+        "created_at": now_ist(),
+        "location_name": starting_room,
+    }
 
 
 def generate_variant_puzzle(location_code: str, seed: int) -> dict[str, Any]:
@@ -242,7 +356,7 @@ def generate_variant_puzzle(location_code: str, seed: int) -> dict[str, Any]:
         "LOC-04": ("PEN + PAPER", "Stationary"),
         "LOC-05": ("IRON + REPS", "Gym"),
         "LOC-06": ("GREEN + CIRCLE + GARDEN", "Green Circle — IMR Wala Garden"),
-        "LOC-07": ("SECURITY + GATE + UNCLE", "Guard Wale Uncle"),
+        "LOC-07": ("SECURITY + MAIN + GATE", "Guard Main Gate"),
         "LOC-08": ("KNOWLEDGE + GODDESS + STATUE", "Saraswati Mata Murti — A Block"),
         "LOC-09": ("BOOK + MONEY", "Book Bank"),
         "LOC-10": ("F BLOCK + AIR", "F Block Hawamahal"),
@@ -289,6 +403,7 @@ def generate_variant_puzzle(location_code: str, seed: int) -> dict[str, Any]:
             "    for value in values:",
             "        value = (value - MASK) % 256",
             "        value = (value - SHIFT) % 256",
+            "        chars.append(chr(value))",
             "    return ''.join(chars)",
             "",
             "shadow = fold(DATA)",
@@ -340,30 +455,70 @@ def generate_variant_puzzle(location_code: str, seed: int) -> dict[str, Any]:
 
 def generate_canonical_assignment(team: dict[str, Any], location_code: str) -> dict[str, Any]:
     existing = db.assignments.find_one({"team_id": team["_id"], "location_code": location_code})
-    if existing:
+    if existing and existing.get("target_next_code"):
         return existing
-    puzzle = select_unique_puzzle(team["_id"], location_code)
-    hints = puzzle.get("hints", [])
-    hint1 = puzzle.get("hint1") or (hints[0] if len(hints) > 0 else "Trace or execute the code carefully.")
-    hint2 = puzzle.get("hint2") or (hints[1] if len(hints) > 1 else "The output is an indirect clue to your next destination.")
+
+    route = team.get("route", [])
+    if location_code in route:
+        idx = route.index(location_code)
+        total = len(route)
+    else:
+        idx = 0
+        total = max(1, len(route))
+
+    # If this is not the final checkpoint, assign puzzle pointing to the NEXT checkpoint in the route!
+    if idx < total - 1 and len(route) > idx + 1:
+        target_next_code = route[idx + 1]
+        puzzle = select_unique_puzzle(team["_id"], target_next_code)
+        target_next_name = LOCATION_MAP.get(target_next_code, target_next_code)
+        step_num = idx + 1
+        title = f"Checkpoint {step_num} Cleared — Trail Challenge"
+        hint1 = puzzle.get("hint1") or "Trace or execute the code carefully to reveal your next destination."
+        hint2 = puzzle.get("hint2") or f"Interpret the decoded words to locate Checkpoint {step_num + 1}."
+        extra_aliases = ["guard wale uncle", "guardwaleuncle", "guard main gate", "guardmaingate"] if target_next_code == "LOC-07" else []
+        accepted = list({
+            normalize_answer(puzzle.get("answer") or puzzle.get("expected_output") or ""),
+            normalize_answer(target_next_name),
+            normalize_answer(target_next_code),
+            *[normalize_answer(x) for x in puzzle.get("accepted_answers", [])],
+            *[normalize_answer(x) for x in extra_aliases],
+        })
+    else:
+        # Final checkpoint (10th) -> Assign final victory challenge leading back to starting room!
+        target_next_code = "FINISH"
+        s = db.game_state.find_one({"_id": "global"}) or {} if db is not None else {}
+        starting_room = s.get("starting_room", "Seminar Hall 2")
+        seed_text = hashlib.sha256(f"{team['_id']}:FINISH:{secrets.token_hex(8)}".encode()).hexdigest()
+        seed = int(seed_text[:12], 16)
+        puzzle = generate_finish_puzzle(starting_room, seed)
+        title = f"Checkpoint {total} Cleared — Final Victory Challenge"
+        hint1 = "All physical checkpoints cleared! Decode the code to find where the hunt officially concludes."
+        hint2 = f"Return to {starting_room} to register your team's final time."
+        accepted = puzzle.get("accepted_answers", [
+            normalize_answer(starting_room),
+            normalize_answer("seminar hall 2"),
+            normalize_answer("seminar hall"),
+        ])
+
     assignment = {
         "team_id": team["_id"],
         "location_code": location_code,
+        "target_next_code": target_next_code,
         "puzzle_key": puzzle["puzzle_key"],
         "assigned_at": now_ist(),
         "puzzle_snapshot": {
-            "title": puzzle.get("title", f"{LOCATION_MAP.get(location_code, location_code)} Challenge"),
+            "title": title,
             "language": puzzle.get("language", "Python"),
             "code": puzzle.get("code", ""),
             "hint1": hint1,
             "hint2": hint2,
             "difficulty": puzzle.get("difficulty", "Medium"),
-            "accepted_answers": puzzle.get("accepted_answers", [normalize_answer(puzzle.get("answer") or puzzle.get("expected_output") or "")]),
+            "accepted_answers": accepted,
         },
     }
     db.assignments.update_one(
         {"team_id": team["_id"], "location_code": location_code},
-        {"$setOnInsert": assignment},
+        {"$set": assignment},
         upsert=True,
     )
     return db.assignments.find_one({"team_id": team["_id"], "location_code": location_code})
@@ -374,14 +529,44 @@ def initialize_routes_and_assignments() -> None:
     Authoritative Rule 2 & 17:
     Generate and freeze a complete randomized route containing all 10 locations exactly once
     separately for every team. Pre-assign unique puzzles per team/location and freeze them.
+    Optimized to run in O(1) bulk MongoDB operations instead of N*10 individual round trips.
     """
     teams = list(db.teams.find({"status": {"$ne": "DISQUALIFIED"}}))
-    all_codes = [x["code"] for x in LOCATIONS]
+    if not teams:
+        return
 
+    all_codes = [x["code"] for x in LOCATIONS]
     existing_routes = [tuple(t.get("route", [])) for t in teams if t.get("route")]
+
+    gs = db.game_state.find_one({"_id": "global"}) if db is not None else None
+    game_status = "LIVE" if (gs and gs.get("status") == "LIVE") else "READY"
+    starting_room = (gs or {}).get("starting_room", "Seminar Hall 2")
+
+    # Load all puzzles into memory by location for fast, unique assignment
+    all_puzzles = list(db.puzzles.find())
+    puzzles_by_loc: dict[str, list[dict[str, Any]]] = {}
+    for p in all_puzzles:
+        puzzles_by_loc.setdefault(p.get("location_code", ""), []).append(p)
+
+    # Track puzzle keys already assigned
+    existing_assignments = list(db.assignments.find({}, {"team_id": 1, "location_code": 1, "target_next_code": 1, "puzzle_key": 1}))
+    assigned_keys_by_loc: dict[str, set[str]] = {}
+    assigned_team_locs: set[tuple[Any, str]] = set()
+    for a in existing_assignments:
+        loc = a.get("target_next_code")
+        pkey = a.get("puzzle_key")
+        if loc and pkey:
+            assigned_keys_by_loc.setdefault(loc, set()).add(pkey)
+        if a.get("team_id") and a.get("location_code"):
+            assigned_team_locs.add((a["team_id"], a["location_code"]))
+
+    team_ops: list[UpdateOne] = []
+    assignment_ops: list[UpdateOne] = []
 
     for team in teams:
         if team.get("game_initialized") and team.get("route") and len(team.get("route")) == 10:
+            if gs and gs.get("status") == "LIVE" and team.get("status") == "READY":
+                team_ops.append(UpdateOne({"_id": team["_id"]}, {"$set": {"status": "LIVE"}}))
             continue
 
         # Deterministically generate a unique permutation
@@ -393,7 +578,7 @@ def initialize_routes_and_assignments() -> None:
         existing_routes.append(tuple(shuffled))
 
         first_target = shuffled[0]
-        db.teams.update_one({"_id": team["_id"]}, {"$set": {
+        team_ops.append(UpdateOne({"_id": team["_id"]}, {"$set": {
             "route": shuffled,
             "current_step": 0,
             "score": 0,
@@ -401,15 +586,85 @@ def initialize_routes_and_assignments() -> None:
             "remaining_locations": shuffled,
             "target_location_code": first_target,
             "target_assigned_at": now_ist(),
-            "status": "READY",
+            "status": game_status,
             "game_initialized": True,
             "hints_used": 0,
-        }})
+        }}))
 
         # Pre-generate and freeze unique puzzle assignments for all 10 checkpoints
-        team_doc = db.teams.find_one({"_id": team["_id"]})
-        for loc_code in shuffled:
-            generate_canonical_assignment(team_doc, loc_code)
+        total = len(shuffled)
+        for idx, loc_code in enumerate(shuffled):
+            if (team["_id"], loc_code) in assigned_team_locs:
+                continue
+
+            if idx < total - 1 and len(shuffled) > idx + 1:
+                target_next_code = shuffled[idx + 1]
+                used_keys = assigned_keys_by_loc.setdefault(target_next_code, set())
+                candidates = [p for p in puzzles_by_loc.get(target_next_code, []) if p.get("puzzle_key") not in used_keys]
+                if candidates:
+                    puzzle = secrets.choice(candidates)
+                    used_keys.add(puzzle["puzzle_key"])
+                elif puzzles_by_loc.get(target_next_code):
+                    puzzle = secrets.choice(puzzles_by_loc[target_next_code])
+                else:
+                    seed_text = hashlib.sha256(f"{team['_id']}:{target_next_code}:{secrets.token_hex(8)}".encode()).hexdigest()
+                    seed = int(seed_text[:12], 16)
+                    puzzle = generate_variant_puzzle(target_next_code, seed)
+
+                target_next_name = LOCATION_MAP.get(target_next_code, target_next_code)
+                step_num = idx + 1
+                title = f"Checkpoint {step_num} Cleared — Trail Challenge"
+                hint1 = puzzle.get("hint1") or "Trace or execute the code carefully to reveal your next destination."
+                hint2 = puzzle.get("hint2") or f"Interpret the decoded words to locate Checkpoint {step_num + 1}."
+                extra_aliases = ["guard wale uncle", "guardwaleuncle", "guard main gate", "guardmaingate"] if target_next_code == "LOC-07" else []
+                accepted = list({
+                    normalize_answer(puzzle.get("answer") or puzzle.get("expected_output") or ""),
+                    normalize_answer(target_next_name),
+                    normalize_answer(target_next_code),
+                    *[normalize_answer(x) for x in puzzle.get("accepted_answers", [])],
+                    *[normalize_answer(x) for x in extra_aliases],
+                })
+            else:
+                target_next_code = "FINISH"
+                seed_text = hashlib.sha256(f"{team['_id']}:FINISH:{secrets.token_hex(8)}".encode()).hexdigest()
+                seed = int(seed_text[:12], 16)
+                puzzle = generate_finish_puzzle(starting_room, seed)
+                title = f"Checkpoint {total} Cleared — Final Victory Challenge"
+                hint1 = "All physical checkpoints cleared! Decode the code to find where the hunt officially concludes."
+                hint2 = f"Return to {starting_room} to register your team's final time."
+                accepted = puzzle.get("accepted_answers", [
+                    normalize_answer(starting_room),
+                    normalize_answer("seminar hall 2"),
+                    normalize_answer("seminar hall"),
+                ])
+
+            assignment = {
+                "team_id": team["_id"],
+                "location_code": loc_code,
+                "target_next_code": target_next_code,
+                "puzzle_key": puzzle["puzzle_key"],
+                "assigned_at": now_ist(),
+                "puzzle_snapshot": {
+                    "title": title,
+                    "language": puzzle.get("language", "Python"),
+                    "code": puzzle.get("code", ""),
+                    "hint1": hint1,
+                    "hint2": hint2,
+                    "difficulty": puzzle.get("difficulty", "Medium"),
+                    "accepted_answers": accepted,
+                },
+            }
+            assignment_ops.append(UpdateOne(
+                {"team_id": team["_id"], "location_code": loc_code},
+                {"$set": assignment},
+                upsert=True,
+            ))
+            assigned_team_locs.add((team["_id"], loc_code))
+
+    if team_ops:
+        db.teams.bulk_write(team_ops, ordered=False)
+    if assignment_ops:
+        db.assignments.bulk_write(assignment_ops, ordered=False)
 
 
 def remaining_seconds(state: dict[str, Any]) -> int:
@@ -454,6 +709,7 @@ def maybe_auto_start_game() -> None:
         {"_id": "global", "status": {"$in": ["SETUP", "READY"]}, "start_at": {"$lte": now}},
         {"$set": {"status": "LIVE", "updated_at": now}}
     )
+    db.teams.update_many({"status": "READY"}, {"$set": {"status": "LIVE"}})
 
 
 def maybe_auto_end_game() -> None:
@@ -534,12 +790,13 @@ def results():
     if not s or not s.get("results_published"):
         return jsonify({"ok": True, "published": False, "results": []})
 
-    valid_teams = list(db.teams.find({"status": {"$ne": "DISQUALIFIED"}}))
+    all_teams = list(db.teams.find())
 
     finishers = []
     incomplete = []
+    disqualified = []
 
-    for t in valid_teams:
+    for t in all_teams:
         completed_count = len(t.get("completed_locations", []))
         item = {
             "id": str(t["_id"]),
@@ -552,21 +809,34 @@ def results():
             "result_token_seconds": t.get("result_token_seconds"),
             "final_result_seconds": t.get("final_result_seconds"),
             "finish_time": iso(t.get("finish_at")),
+            "disqualification_reason": t.get("disqualification_reason"),
         }
-        if completed_count >= 10 or t.get("status") == "FINISHED":
+        if t.get("status") == "DISQUALIFIED":
+            disqualified.append(item)
+        elif completed_count >= 10 or t.get("status") == "FINISHED":
             finishers.append(item)
         else:
             incomplete.append(item)
 
     # Sort finishers by final_result_seconds ASC
-    finishers.sort(key=lambda x: (x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf"), x["score"]))
+    finishers.sort(key=lambda x: (x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf"), -x["score"]))
 
     # Sort incomplete by score DESC, then final_result_seconds / elapsed ASC
     incomplete.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf")))
 
-    ordered = finishers + incomplete
-    for i, row in enumerate(ordered, 1):
-        row["rank"] = i
+    # Sort disqualified by score DESC, then time
+    disqualified.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf")))
+
+    ordered = []
+    rank = 1
+    for row in (finishers + incomplete):
+        row["rank"] = rank
+        ordered.append(row)
+        rank += 1
+
+    for row in disqualified:
+        row["rank"] = "DQ"
+        ordered.append(row)
 
     return jsonify({"ok": True, "published": True, "results": ordered})
 
@@ -635,11 +905,13 @@ def create_team():
     while db.teams.find_one({"team_code": code}):
         code = team_code()
 
+    s = db.game_state.find_one({"_id": "global"})
+    game_status = "LIVE" if (s and s.get("status") == "LIVE") else "READY"
     doc = {
         "team_name": name,
         "team_code": code,
         "members": [],
-        "status": "READY",
+        "status": game_status,
         "score": 0,
         "current_step": 0,
         "completed_locations": [],
@@ -801,11 +1073,14 @@ def list_players():
 @admin_required
 def admin_locations():
     rows = []
+    base = os.getenv("PUBLIC_APP_URL", request.host_url.rstrip("/"))
     for loc in db.checkpoints.find().sort("location_code", ASCENDING):
+        payload = f"{base.rstrip('/')}/?scan={loc['qr_token']}"
         rows.append({
             "code": loc["location_code"],
             "name": loc["location_name"],
             "qr_token": loc["qr_token"],
+            "scan_url": payload,
         })
     return jsonify({"ok": True, "locations": rows})
 
@@ -950,6 +1225,7 @@ def prepare_game():
 def manual_start():
     s = db.game_state.find_one({"_id": "global"})
     if s and s.get("status") == "LIVE":
+        db.teams.update_many({"status": "READY"}, {"$set": {"status": "LIVE"}})
         return jsonify({"ok": True, "message": "Game is already live", "game": public_game_state()})
 
     initialize_routes_and_assignments()
@@ -959,6 +1235,7 @@ def manual_start():
         {"$set": {"status": "LIVE", "start_at": start, "updated_at": start}, "$unset": {"paused_remaining_seconds": ""}},
         return_document=ReturnDocument.AFTER,
     )
+    db.teams.update_many({"status": "READY"}, {"$set": {"status": "LIVE"}})
     return jsonify({"ok": True, "game": public_game_state()})
 
 
@@ -1089,11 +1366,11 @@ def unpublish_results():
 @app.get("/api/admin/export-results")
 @admin_required
 def export_results():
-    import csv
-    valid_teams = list(db.teams.find({"status": {"$ne": "DISQUALIFIED"}}))
+    all_teams = list(db.teams.find())
     finishers = []
     incomplete = []
-    for t in valid_teams:
+    disqualified = []
+    for t in all_teams:
         completed_count = len(t.get("completed_locations", []))
         item = {
             "team": t.get("team_name", "Unknown"),
@@ -1104,19 +1381,25 @@ def export_results():
             "status": t.get("status", "READY"),
             "final_result_seconds": t.get("final_result_seconds", ""),
             "finish_time": iso(t.get("finish_at")) or "",
+            "disqualification_reason": t.get("disqualification_reason", ""),
         }
-        if completed_count >= 10 or t.get("status") == "FINISHED":
+        if t.get("status") == "DISQUALIFIED":
+            disqualified.append(item)
+        elif completed_count >= 10 or t.get("status") == "FINISHED":
             finishers.append(item)
         else:
             incomplete.append(item)
-    finishers.sort(key=lambda x: (x["final_result_seconds"] if isinstance(x["final_result_seconds"], (int, float)) else 999999, x["score"]))
+    finishers.sort(key=lambda x: (x["final_result_seconds"] if isinstance(x["final_result_seconds"], (int, float)) else 999999, -x["score"]))
     incomplete.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if isinstance(x["final_result_seconds"], (int, float)) else 999999))
-    ordered = finishers + incomplete
+    disqualified.sort(key=lambda x: (-x["score"], 999999))
+
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["Rank", "Team Name", "Team Code", "Members", "Score", "Completed Checkpoints", "Status", "Final Seconds", "Finish Time"])
-    for rank, r in enumerate(ordered, 1):
-        writer.writerow([rank, r["team"], r["code"], r["members"], r["score"], r["completed"], r["status"], r["final_result_seconds"], r["finish_time"]])
+    writer.writerow(["Rank", "Team Name", "Team Code", "Members", "Score", "Completed Checkpoints", "Status", "Final Seconds", "Finish Time", "Disqualification Reason"])
+    for rank, r in enumerate(finishers + incomplete, 1):
+        writer.writerow([rank, r["team"], r["code"], r["members"], r["score"], r["completed"], r["status"], r["final_result_seconds"], r["finish_time"], ""])
+    for r in disqualified:
+        writer.writerow(["DQ", r["team"], r["code"], r["members"], r["score"], r["completed"], r["status"], "", "", r.get("disqualification_reason", "Disqualified")])
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     mem.seek(0)
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="scavenger_hunt_results.csv")
@@ -1208,7 +1491,7 @@ def me():
             "members_count": len(team.get("members", [])),
             "total": 10,
             "next_location_code": expected_code if is_live else None,
-            "next_location_name": (LOCATION_MAP.get(expected_code, "") if is_live and first_checkpoint else None),
+            "next_location_name": (LOCATION_MAP.get(expected_code, "") if is_live and (first_checkpoint or not scanned_doc) else None),
             "puzzle": puzzle if is_live and expected_code else None,
             "scanned": bool(scanned_doc),
         }
@@ -1252,9 +1535,21 @@ def scan():
     scanned = cp["location_code"]
     scan_time = now_ist()
 
-    # Checkpoint already completed check
+    # Checkpoint already completed by a teammate check:
+    # Do NOT disqualify or error. Instead, directly show the next location cleanly!
     if scanned in team.get("completed_locations", []):
-        return jsonify({"ok": False, "error": "ALREADY_COMPLETED", "message": "Checkpoint already completed."}), 409
+        next_target = team.get("target_location_code")
+        next_name = LOCATION_MAP.get(next_target, "") if next_target else "Base"
+        is_finished = team.get("status") == "FINISHED"
+        return jsonify({
+            "ok": True,
+            "already_cleared": True,
+            "message": f"Checkpoint already cleared by your teammate! Head to {next_name}." if not is_finished else "All checkpoints completed by your team! Return to base.",
+            "checkpoint": {"code": scanned, "name": LOCATION_MAP.get(scanned, scanned)},
+            "next_location_code": next_target,
+            "next_location_name": next_name,
+            "finished": is_finished,
+        })
 
     # WRONG CHECKPOINT SCAN -> INSTANT DISQUALIFICATION OF ENTIRE TEAM
     if scanned != expected:
@@ -1357,12 +1652,13 @@ def answer():
     completed = db.teams.find_one_and_update(
         {
             "_id": team["_id"],
-            "status": "LIVE",
+            "status": {"$in": ["LIVE", "READY"]},
             "current_step": step,
             "target_location_code": expected,
             "completed_locations": {"$ne": expected},
         },
         {
+            "$set": {"status": "LIVE"},
             "$inc": {"score": 1, "current_step": 1},
             "$push": {"completed_locations": expected},
             "$pull": {"remaining_locations": expected},
@@ -1371,12 +1667,25 @@ def answer():
     )
 
     if not completed:
+        fresh_team = db.teams.find_one({"_id": team["_id"]})
+        if fresh_team and expected in fresh_team.get("completed_locations", []):
+            next_target = fresh_team.get("target_location_code")
+            is_finished = fresh_team.get("status") == "FINISHED" or len(fresh_team.get("completed_locations", [])) >= 10
+            return jsonify({
+                "ok": True,
+                "correct": True,
+                "already_completed": True,
+                "finished": is_finished,
+                "message": "Your teammate already solved this checkpoint!" if not is_finished else "All checkpoints completed!",
+                "next_location_code": next_target,
+                "next_location_name": LOCATION_MAP.get(next_target, "") if next_target else None,
+                "score": int(fresh_team.get("score", 0)),
+                "completed": len(fresh_team.get("completed_locations", [])),
+            })
         return jsonify({
-            "ok": True,
-            "correct": True,
-            "already_completed": True,
-            "message": "Your teammate already solved this checkpoint.",
-        })
+            "ok": False,
+            "error": "Checkpoint status out of sync. Please refresh the page.",
+        }), 409
 
     # Record solved scan
     db.scans.insert_one({
@@ -1392,9 +1701,29 @@ def answer():
 
     # Timing calculation
     start_at = s.get("start_at") or event_time
+    if isinstance(start_at, str):
+        try:
+            start_at = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
+        except Exception:
+            start_at = event_time
+    if start_at.tzinfo is None:
+        start_at = start_at.replace(tzinfo=timezone.utc)
+
     game_elapsed = max(0, (event_time - start_at).total_seconds())
     members = completed.get("members", [])
-    entry_diff = sum(max(0, (start_at - m["created_at"]).total_seconds()) for m in members)
+    entry_diff = 0
+    for m in members:
+        m_created = m.get("created_at")
+        if isinstance(m_created, str):
+            try:
+                m_created = datetime.fromisoformat(m_created.replace("Z", "+00:00"))
+            except Exception:
+                m_created = start_at
+        if isinstance(m_created, datetime):
+            if m_created.tzinfo is None:
+                m_created = m_created.replace(tzinfo=timezone.utc)
+            entry_diff += max(0, (start_at - m_created).total_seconds())
+
     buf_sec = int(s.get("token_buffer_seconds", 20))
     final_seconds = int(round(game_elapsed + entry_diff + buf_sec))
 
@@ -1439,6 +1768,7 @@ def answer():
         "score": int(completed.get("score", 0)),
         "completed": len(completed.get("completed_locations", [])),
         "next_location_code": next_target,
+        "next_location_name": LOCATION_MAP.get(next_target, "") if next_target else None,
     })
 
 
@@ -1492,5 +1822,5 @@ if __name__ == "__main__":
         ensure_db()
     except Exception as e:
         app.logger.warning(f"Initial ensure_db warning: {e}")
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True, use_reloader=True)
 

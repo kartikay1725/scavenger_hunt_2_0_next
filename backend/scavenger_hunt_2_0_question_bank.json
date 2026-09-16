@@ -72,7 +72,7 @@
     },
     {
       "location_id": "LOC-07",
-      "name": "Guard Wale Uncle",
+      "name": "Guard Main Gate",
       "clue_themes": [
         "GATE SECURITY WATCH",
         "GUARD AT GATE",
@@ -1819,15 +1819,17 @@
     {
       "puzzle_id": "SHT2-Q-0061",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "python",
       "difficulty": "medium",
-      "title": "Guard Wale Uncle — PYTHON Challenge 1",
+      "title": "Guard Main Gate — PYTHON Challenge 1",
       "code": "# Scavenger Hunt 2.0 puzzle 3000\nraw = [77, 19, 65, 124, 118, 82, 109, 113, 72, 111, 112, 65, 117, 72, 67, 67, 64, 124, 12]\norder = [0, 6, 16, 7, 18, 3, 4, 9, 15, 17, 13, 14, 8, 1, 2, 5, 11, 10, 12]\nsalt = 21\n\ndef fold(values):\n    state = 0\n    for i, value in enumerate(values):\n        state ^= (value + i * 3) & 127\n        state = ((state << 1) | (state >> 6)) & 127\n    return state\n\ndef undo_scramble(values, positions):\n    result = [0] * len(values)\n    for original_index, scrambled_index in enumerate(positions):\n        result[original_index] = values[scrambled_index]\n    return result\n\ndef decode(values):\n    # Reverse the position shuffle first, then reverse the per-character transform.\n    restored = undo_scramble(values, order)\n    chars = []\n    for i, value in enumerate(restored):\n        value ^= (0x1F + (i % 5))\n        value -= 11 + (i % 7)\n        chars.append(chr(value))\n    return \"\".join(chars)\n\n# Two reversible passes make the program less visually obvious.\nmasked = [v ^ ((salt + i) & 31) for i, v in enumerate(raw)]\nnoise = [v ^ ((salt + i) & 31) for i, v in enumerate(masked)]\n\nshadow = [((v * 7) + 13) % 101 for v in raw]\nguard = fold(shadow)\n\nanswer = decode(noise)\nif guard >= 0:\n    print(answer)\n",
       "expected_output": "GATE SECURITY WATCH",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1848,15 +1850,17 @@
     {
       "puzzle_id": "SHT2-Q-0062",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "python",
       "difficulty": "medium",
-      "title": "Guard Wale Uncle — PYTHON Challenge 2",
+      "title": "Guard Main Gate — PYTHON Challenge 2",
       "code": "# Scavenger Hunt 2.0 puzzle 3001\nraw = [77, 116, 65, 80, 14, 114, 119, 66, 47, 111, 126, 67, 112]\norder = [0, 2, 9, 7, 12, 8, 5, 10, 4, 6, 3, 11, 1]\nsalt = 9\n\ndef fold(values):\n    state = 0\n    for i, value in enumerate(values):\n        state ^= (value + i * 3) & 127\n        state = ((state << 1) | (state >> 6)) & 127\n    return state\n\ndef undo_scramble(values, positions):\n    result = [0] * len(values)\n    for original_index, scrambled_index in enumerate(positions):\n        result[original_index] = values[scrambled_index]\n    return result\n\ndef decode(values):\n    # Reverse the position shuffle first, then reverse the per-character transform.\n    restored = undo_scramble(values, order)\n    chars = []\n    for i, value in enumerate(restored):\n        value ^= (0x1F + (i % 5))\n        value -= 11 + (i % 7)\n        chars.append(chr(value))\n    return \"\".join(chars)\n\n# Two reversible passes make the program less visually obvious.\nmasked = [v ^ ((salt + i) & 31) for i, v in enumerate(raw)]\nnoise = [v ^ ((salt + i) & 31) for i, v in enumerate(masked)]\n\nshadow = [((v * 7) + 13) % 101 for v in raw]\nguard = fold(shadow)\n\nanswer = decode(noise)\nif guard >= 0:\n    print(answer)\n",
       "expected_output": "GUARD AT GATE",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1877,15 +1881,17 @@
     {
       "puzzle_id": "SHT2-Q-0063",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "python",
       "difficulty": "hard",
-      "title": "Guard Wale Uncle — PYTHON Challenge 3",
+      "title": "Guard Main Gate — PYTHON Challenge 3",
       "code": "# Scavenger Hunt 2.0 puzzle 3002\nraw = [113, 66, 122, 113, 14, 126, 70, 69, 66, 66, 65, 69, 76, 65, 65]\norder = [10, 3, 0, 14, 1, 6, 11, 7, 4, 5, 12, 13, 9, 8, 2]\nsalt = 26\n\ndef fold(values):\n    state = 0\n    for i, value in enumerate(values):\n        state ^= (value + i * 3) & 127\n        state = ((state << 1) | (state >> 6)) & 127\n    return state\n\ndef undo_scramble(values, positions):\n    result = [0] * len(values)\n    for original_index, scrambled_index in enumerate(positions):\n        result[original_index] = values[scrambled_index]\n    return result\n\ndef decode(values):\n    # Reverse the position shuffle first, then reverse the per-character transform.\n    restored = undo_scramble(values, order)\n    chars = []\n    for i, value in enumerate(restored):\n        value ^= (0x1F + (i % 5))\n        value -= 11 + (i % 7)\n        chars.append(chr(value))\n    return \"\".join(chars)\n\n# Two reversible passes make the program less visually obvious.\nmasked = [v ^ ((salt + i) & 31) for i, v in enumerate(raw)]\nnoise = [v ^ ((salt + i) & 31) for i, v in enumerate(masked)]\n\nshadow = [((v * 7) + 13) % 101 for v in raw]\nguard = fold(shadow)\n\nanswer = decode(noise)\nif guard >= 0:\n    print(answer)\n",
       "expected_output": "SECURITY PERSON",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1906,15 +1912,17 @@
     {
       "puzzle_id": "SHT2-Q-0064",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "python",
       "difficulty": "hard",
-      "title": "Guard Wale Uncle — PYTHON Challenge 4",
+      "title": "Guard Main Gate — PYTHON Challenge 4",
       "code": "# Scavenger Hunt 2.0 puzzle 3003\nraw = [109, 66, 80, 119, 67, 114, 64, 116, 125, 116, 115, 120, 14]\norder = [8, 0, 6, 10, 9, 1, 5, 11, 12, 3, 2, 4, 7]\nsalt = 14\n\ndef fold(values):\n    state = 0\n    for i, value in enumerate(values):\n        state ^= (value + i * 3) & 127\n        state = ((state << 1) | (state >> 6)) & 127\n    return state\n\ndef undo_scramble(values, positions):\n    result = [0] * len(values)\n    for original_index, scrambled_index in enumerate(positions):\n        result[original_index] = values[scrambled_index]\n    return result\n\ndef decode(values):\n    # Reverse the position shuffle first, then reverse the per-character transform.\n    restored = undo_scramble(values, order)\n    chars = []\n    for i, value in enumerate(restored):\n        value ^= (0x1F + (i % 5))\n        value -= 11 + (i % 7)\n        chars.append(chr(value))\n    return \"\".join(chars)\n\n# Two reversible passes make the program less visually obvious.\nmasked = [v ^ ((salt + i) & 31) for i, v in enumerate(raw)]\nnoise = [v ^ ((salt + i) & 31) for i, v in enumerate(masked)]\n\nshadow = [((v * 7) + 13) % 101 for v in raw]\nguard = fold(shadow)\n\nanswer = decode(noise)\nif guard >= 0:\n    print(answer)\n",
       "expected_output": "WATCHMAN GATE",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1935,15 +1943,17 @@
     {
       "puzzle_id": "SHT2-Q-0065",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "python",
       "difficulty": "expert",
-      "title": "Guard Wale Uncle — PYTHON Challenge 5",
+      "title": "Guard Main Gate — PYTHON Challenge 5",
       "code": "# Scavenger Hunt 2.0 puzzle 3004\nraw = [70, 72, 71, 124, 109, 64, 12, 114, 112, 77, 49, 109, 70, 113, 109, 75]\norder = [9, 11, 5, 13, 6, 1, 0, 14, 3, 7, 10, 12, 8, 2, 4, 15]\nsalt = 31\n\ndef fold(values):\n    state = 0\n    for i, value in enumerate(values):\n        state ^= (value + i * 3) & 127\n        state = ((state << 1) | (state >> 6)) & 127\n    return state\n\ndef undo_scramble(values, positions):\n    result = [0] * len(values)\n    for original_index, scrambled_index in enumerate(positions):\n        result[original_index] = values[scrambled_index]\n    return result\n\ndef decode(values):\n    # Reverse the position shuffle first, then reverse the per-character transform.\n    restored = undo_scramble(values, order)\n    chars = []\n    for i, value in enumerate(restored):\n        value ^= (0x1F + (i % 5))\n        value -= 11 + (i % 7)\n        chars.append(chr(value))\n    return \"\".join(chars)\n\n# Two reversible passes make the program less visually obvious.\nmasked = [v ^ ((salt + i) & 31) for i, v in enumerate(raw)]\nnoise = [v ^ ((salt + i) & 31) for i, v in enumerate(masked)]\n\nshadow = [((v * 7) + 13) % 101 for v in raw]\nguard = fold(shadow)\n\nanswer = decode(noise)\nif guard >= 0:\n    print(answer)\n",
       "expected_output": "GATE GUARD WATCH",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1964,15 +1974,17 @@
     {
       "puzzle_id": "SHT2-Q-0066",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "cpp",
       "difficulty": "medium",
-      "title": "Guard Wale Uncle — CPP Challenge 1",
+      "title": "Guard Main Gate — CPP Challenge 1",
       "code": "// Scavenger Hunt 2.0 puzzle 3050\n#include <iostream>\n#include <vector>\n#include <string>\nusing namespace std;\n\nint fold(const vector<int>& values) {\n    int state = 0;\n    for (size_t i = 0; i < values.size(); ++i) {\n        state ^= (values[i] + (int)i * 3) & 127;\n        state = ((state << 1) | (state >> 6)) & 127;\n    }\n    return state;\n}\n\nvector<int> undo_scramble(const vector<int>& values, const vector<int>& positions) {\n    vector<int> result(values.size(), 0);\n    for (size_t original = 0; original < positions.size(); ++original)\n        result[original] = values[positions[original]];\n    return result;\n}\n\nstring decode(const vector<int>& values, const vector<int>& positions) {\n    vector<int> restored = undo_scramble(values, positions);\n    string answer;\n    for (size_t i = 0; i < restored.size(); ++i) {\n        int value = restored[i];\n        value ^= (0x1F + ((int)i % 5));\n        value -= 11 + ((int)i % 7);\n        answer.push_back((char)value);\n    }\n    return answer;\n}\n\nint main() {\n    vector<int> raw = {82, 12, 117, 77, 113, 67, 65, 118, 64, 67, 72, 112, 124, 109, 19, 111, 72, 124, 65};\n    vector<int> order = {3, 13, 8, 4, 1, 12, 7, 15, 5, 17, 10, 9, 16, 14, 6, 0, 18, 11, 2};\n    const int salt = 30;\n\n    vector<int> masked(raw.size());\n    vector<int> noise(raw.size());\n\n    for (size_t i = 0; i < raw.size(); ++i)\n        masked[i] = raw[i] ^ ((salt + (int)i) & 31);\n\n    for (size_t i = 0; i < masked.size(); ++i)\n        noise[i] = masked[i] ^ ((salt + (int)i) & 31);\n\n    vector<int> shadow(raw.size());\n    for (size_t i = 0; i < raw.size(); ++i)\n        shadow[i] = ((raw[i] * 7) + 13) % 101;\n\n    int guard = fold(shadow);\n    string answer = decode(noise, order);\n\n    if (guard >= 0)\n        cout << answer << endl;\n\n    return 0;\n}\n",
       "expected_output": "GATE SECURITY WATCH",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -1993,15 +2005,17 @@
     {
       "puzzle_id": "SHT2-Q-0067",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "cpp",
       "difficulty": "medium",
-      "title": "Guard Wale Uncle — CPP Challenge 2",
+      "title": "Guard Main Gate — CPP Challenge 2",
       "code": "// Scavenger Hunt 2.0 puzzle 3051\n#include <iostream>\n#include <vector>\n#include <string>\nusing namespace std;\n\nint fold(const vector<int>& values) {\n    int state = 0;\n    for (size_t i = 0; i < values.size(); ++i) {\n        state ^= (values[i] + (int)i * 3) & 127;\n        state = ((state << 1) | (state >> 6)) & 127;\n    }\n    return state;\n}\n\nvector<int> undo_scramble(const vector<int>& values, const vector<int>& positions) {\n    vector<int> result(values.size(), 0);\n    for (size_t original = 0; original < positions.size(); ++original)\n        result[original] = values[positions[original]];\n    return result;\n}\n\nstring decode(const vector<int>& values, const vector<int>& positions) {\n    vector<int> restored = undo_scramble(values, positions);\n    string answer;\n    for (size_t i = 0; i < restored.size(); ++i) {\n        int value = restored[i];\n        value ^= (0x1F + ((int)i % 5));\n        value -= 11 + ((int)i % 7);\n        answer.push_back((char)value);\n    }\n    return answer;\n}\n\nint main() {\n    vector<int> raw = {80, 112, 66, 116, 47, 126, 67, 114, 111, 77, 65, 119, 14};\n    vector<int> order = {9, 10, 8, 2, 1, 4, 7, 5, 12, 11, 0, 6, 3};\n    const int salt = 18;\n\n    vector<int> masked(raw.size());\n    vector<int> noise(raw.size());\n\n    for (size_t i = 0; i < raw.size(); ++i)\n        masked[i] = raw[i] ^ ((salt + (int)i) & 31);\n\n    for (size_t i = 0; i < masked.size(); ++i)\n        noise[i] = masked[i] ^ ((salt + (int)i) & 31);\n\n    vector<int> shadow(raw.size());\n    for (size_t i = 0; i < raw.size(); ++i)\n        shadow[i] = ((raw[i] * 7) + 13) % 101;\n\n    int guard = fold(shadow);\n    string answer = decode(noise, order);\n\n    if (guard >= 0)\n        cout << answer << endl;\n\n    return 0;\n}\n",
       "expected_output": "GUARD AT GATE",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -2022,15 +2036,17 @@
     {
       "puzzle_id": "SHT2-Q-0068",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "cpp",
       "difficulty": "hard",
-      "title": "Guard Wale Uncle — CPP Challenge 3",
+      "title": "Guard Main Gate — CPP Challenge 3",
       "code": "// Scavenger Hunt 2.0 puzzle 3052\n#include <iostream>\n#include <vector>\n#include <string>\nusing namespace std;\n\nint fold(const vector<int>& values) {\n    int state = 0;\n    for (size_t i = 0; i < values.size(); ++i) {\n        state ^= (values[i] + (int)i * 3) & 127;\n        state = ((state << 1) | (state >> 6)) & 127;\n    }\n    return state;\n}\n\nvector<int> undo_scramble(const vector<int>& values, const vector<int>& positions) {\n    vector<int> result(values.size(), 0);\n    for (size_t original = 0; original < positions.size(); ++original)\n        result[original] = values[positions[original]];\n    return result;\n}\n\nstring decode(const vector<int>& values, const vector<int>& positions) {\n    vector<int> restored = undo_scramble(values, positions);\n    string answer;\n    for (size_t i = 0; i < restored.size(); ++i) {\n        int value = restored[i];\n        value ^= (0x1F + ((int)i % 5));\n        value -= 11 + ((int)i % 7);\n        answer.push_back((char)value);\n    }\n    return answer;\n}\n\nint main() {\n    vector<int> raw = {66, 126, 65, 69, 76, 66, 113, 14, 70, 122, 69, 65, 66, 65, 113};\n    vector<int> order = {11, 14, 6, 13, 5, 8, 10, 3, 7, 1, 4, 2, 0, 12, 9};\n    const int salt = 6;\n\n    vector<int> masked(raw.size());\n    vector<int> noise(raw.size());\n\n    for (size_t i = 0; i < raw.size(); ++i)\n        masked[i] = raw[i] ^ ((salt + (int)i) & 31);\n\n    for (size_t i = 0; i < masked.size(); ++i)\n        noise[i] = masked[i] ^ ((salt + (int)i) & 31);\n\n    vector<int> shadow(raw.size());\n    for (size_t i = 0; i < raw.size(); ++i)\n        shadow[i] = ((raw[i] * 7) + 13) % 101;\n\n    int guard = fold(shadow);\n    string answer = decode(noise, order);\n\n    if (guard >= 0)\n        cout << answer << endl;\n\n    return 0;\n}\n",
       "expected_output": "SECURITY PERSON",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -2051,15 +2067,17 @@
     {
       "puzzle_id": "SHT2-Q-0069",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "cpp",
       "difficulty": "hard",
-      "title": "Guard Wale Uncle — CPP Challenge 4",
+      "title": "Guard Main Gate — CPP Challenge 4",
       "code": "// Scavenger Hunt 2.0 puzzle 3053\n#include <iostream>\n#include <vector>\n#include <string>\nusing namespace std;\n\nint fold(const vector<int>& values) {\n    int state = 0;\n    for (size_t i = 0; i < values.size(); ++i) {\n        state ^= (values[i] + (int)i * 3) & 127;\n        state = ((state << 1) | (state >> 6)) & 127;\n    }\n    return state;\n}\n\nvector<int> undo_scramble(const vector<int>& values, const vector<int>& positions) {\n    vector<int> result(values.size(), 0);\n    for (size_t original = 0; original < positions.size(); ++original)\n        result[original] = values[positions[original]];\n    return result;\n}\n\nstring decode(const vector<int>& values, const vector<int>& positions) {\n    vector<int> restored = undo_scramble(values, positions);\n    string answer;\n    for (size_t i = 0; i < restored.size(); ++i) {\n        int value = restored[i];\n        value ^= (0x1F + ((int)i % 5));\n        value -= 11 + ((int)i % 7);\n        answer.push_back((char)value);\n    }\n    return answer;\n}\n\nint main() {\n    vector<int> raw = {66, 14, 67, 114, 80, 109, 116, 115, 119, 125, 116, 64, 120};\n    vector<int> order = {9, 5, 11, 7, 6, 0, 3, 12, 1, 8, 4, 2, 10};\n    const int salt = 23;\n\n    vector<int> masked(raw.size());\n    vector<int> noise(raw.size());\n\n    for (size_t i = 0; i < raw.size(); ++i)\n        masked[i] = raw[i] ^ ((salt + (int)i) & 31);\n\n    for (size_t i = 0; i < masked.size(); ++i)\n        noise[i] = masked[i] ^ ((salt + (int)i) & 31);\n\n    vector<int> shadow(raw.size());\n    for (size_t i = 0; i < raw.size(); ++i)\n        shadow[i] = ((raw[i] * 7) + 13) % 101;\n\n    int guard = fold(shadow);\n    string answer = decode(noise, order);\n\n    if (guard >= 0)\n        cout << answer << endl;\n\n    return 0;\n}\n",
       "expected_output": "WATCHMAN GATE",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",
@@ -2080,15 +2098,17 @@
     {
       "puzzle_id": "SHT2-Q-0070",
       "location_id": "LOC-07",
-      "location_name": "Guard Wale Uncle",
+      "location_name": "Guard Main Gate",
       "language": "cpp",
       "difficulty": "expert",
-      "title": "Guard Wale Uncle — CPP Challenge 5",
+      "title": "Guard Main Gate — CPP Challenge 5",
       "code": "// Scavenger Hunt 2.0 puzzle 3054\n#include <iostream>\n#include <vector>\n#include <string>\nusing namespace std;\n\nint fold(const vector<int>& values) {\n    int state = 0;\n    for (size_t i = 0; i < values.size(); ++i) {\n        state ^= (values[i] + (int)i * 3) & 127;\n        state = ((state << 1) | (state >> 6)) & 127;\n    }\n    return state;\n}\n\nvector<int> undo_scramble(const vector<int>& values, const vector<int>& positions) {\n    vector<int> result(values.size(), 0);\n    for (size_t original = 0; original < positions.size(); ++original)\n        result[original] = values[positions[original]];\n    return result;\n}\n\nstring decode(const vector<int>& values, const vector<int>& positions) {\n    vector<int> restored = undo_scramble(values, positions);\n    string answer;\n    for (size_t i = 0; i < restored.size(); ++i) {\n        int value = restored[i];\n        value ^= (0x1F + ((int)i % 5));\n        value -= 11 + ((int)i % 7);\n        answer.push_back((char)value);\n    }\n    return answer;\n}\n\nint main() {\n    vector<int> raw = {109, 124, 109, 112, 70, 114, 75, 109, 71, 70, 77, 64, 72, 12, 49, 113};\n    vector<int> order = {10, 2, 11, 15, 13, 12, 9, 0, 1, 5, 14, 4, 3, 8, 7, 6};\n    const int salt = 11;\n\n    vector<int> masked(raw.size());\n    vector<int> noise(raw.size());\n\n    for (size_t i = 0; i < raw.size(); ++i)\n        masked[i] = raw[i] ^ ((salt + (int)i) & 31);\n\n    for (size_t i = 0; i < masked.size(); ++i)\n        noise[i] = masked[i] ^ ((salt + (int)i) & 31);\n\n    vector<int> shadow(raw.size());\n    for (size_t i = 0; i < raw.size(); ++i)\n        shadow[i] = ((raw[i] * 7) + 13) % 101;\n\n    int guard = fold(shadow);\n    string answer = decode(noise, order);\n\n    if (guard >= 0)\n        cout << answer << endl;\n\n    return 0;\n}\n",
       "expected_output": "GATE GUARD WATCH",
       "accepted_answers": [
         "guard wale uncle",
-        "guardwaleuncle"
+        "guardwaleuncle",
+        "guard main gate",
+        "guardmaingate"
       ],
       "hints": [
         "Do not guess from the source. Trace or execute the transformations.",

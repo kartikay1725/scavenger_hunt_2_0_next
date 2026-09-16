@@ -12,7 +12,7 @@ LOCATIONS = [
     {"code": "LOC-04", "name": "Stationary"},
     {"code": "LOC-05", "name": "Gym"},
     {"code": "LOC-06", "name": "Green Circle — IMR Wala Garden"},
-    {"code": "LOC-07", "name": "Guard Wale Uncle"},
+    {"code": "LOC-07", "name": "Guard Main Gate"},
     {"code": "LOC-08", "name": "Saraswati Mata Murti — A Block"},
     {"code": "LOC-09", "name": "Book Bank"},
     {"code": "LOC-10", "name": "F Block Hawamahal"},
@@ -62,16 +62,21 @@ class TestGameLogic(unittest.TestCase):
             {"team": "Team Low Incomplete", "score": 7, "completed": 7, "status": "LIVE", "final_result_seconds": 500},
         ]
 
-        valid = [t for t in teams if t["status"] != "DISQUALIFIED"]
-        finishers = [t for t in valid if t["completed"] == 10]
-        incomplete = [t for t in valid if t["completed"] < 10]
+        finishers = [t for t in teams if t["status"] != "DISQUALIFIED" and t["completed"] == 10]
+        incomplete = [t for t in teams if t["status"] != "DISQUALIFIED" and t["completed"] < 10]
+        disqualified = [t for t in teams if t["status"] == "DISQUALIFIED"]
 
         finishers.sort(key=lambda x: (x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf"), -x["score"]))
         incomplete.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf")))
+        disqualified.sort(key=lambda x: (-x["score"], x["final_result_seconds"] if x["final_result_seconds"] is not None else float("inf")))
 
-        ranked = finishers + incomplete
-        for i, t in enumerate(ranked, 1):
+        ranked = []
+        for i, t in enumerate(finishers + incomplete, 1):
             t["rank"] = i
+            ranked.append(t)
+        for t in disqualified:
+            t["rank"] = "DQ"
+            ranked.append(t)
 
         self.assertEqual(ranked[0]["team"], "Team Fast Finisher")
         self.assertEqual(ranked[0]["rank"], 1)
@@ -81,7 +86,8 @@ class TestGameLogic(unittest.TestCase):
         self.assertEqual(ranked[2]["rank"], 3)
         self.assertEqual(ranked[3]["team"], "Team Low Incomplete")
         self.assertEqual(ranked[3]["rank"], 4)
-        self.assertNotIn("Team Disqualified", [t["team"] for t in ranked])
+        self.assertEqual(ranked[4]["team"], "Team Disqualified")
+        self.assertEqual(ranked[4]["rank"], "DQ")
 
     def test_team_join_max_3_members(self):
         """

@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Badge } from "./ui";
-import { Terminal, Shield, LogOut } from "lucide-react";
+import { Shield, LogOut } from "lucide-react";
 
 interface NavbarProps {
   admin?: boolean;
@@ -17,8 +17,12 @@ export function Navbar({ admin = false, gameStatus, onLogout, teamCode }: Navbar
     <header className="sticky top-0 z-40 w-full border-b border-white/[0.06] bg-background/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <Link href={admin ? "/admin" : "/"} className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-violet to-brand-cyan flex items-center justify-center text-white shadow-lg shadow-brand-violet/20 group-hover:scale-105 transition-transform duration-200">
-            <Terminal className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-surface-100/90 border border-white/10 flex items-center justify-center p-1.5 shadow-lg shadow-brand-violet/10 group-hover:scale-105 group-hover:border-brand-violet/40 transition-all duration-200">
+            <img
+              src="/logo.svg"
+              alt="CodeChef Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <div className="font-extrabold text-sm sm:text-base tracking-tight text-white flex items-center gap-2">
@@ -44,7 +48,7 @@ export function Navbar({ admin = false, gameStatus, onLogout, teamCode }: Navbar
             </Badge>
           )}
 
-          {admin ? (
+          {admin && (
             <div className="flex items-center gap-2">
               <Badge variant="cyan" className="hidden sm:inline-flex">
                 <Shield className="w-3 h-3" />
@@ -60,13 +64,6 @@ export function Navbar({ admin = false, gameStatus, onLogout, teamCode }: Navbar
                 </button>
               )}
             </div>
-          ) : (
-            <Link
-              href="/admin/login"
-              className="text-xs text-neutral-400 hover:text-white font-mono transition-colors"
-            >
-              ADMIN
-            </Link>
           )}
         </div>
       </div>

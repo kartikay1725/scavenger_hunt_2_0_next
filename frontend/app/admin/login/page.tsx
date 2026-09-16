@@ -36,17 +36,24 @@ export default function AdminLogin() {
       <Navbar admin />
       <main className="flex-1 flex items-center justify-center p-4">
         <MotionDiv className="w-full max-w-md glass-card rounded-3xl p-8 sm:p-10 space-y-6 border border-white/10 shadow-2xl">
-          <div className="space-y-2">
-            <Badge variant="cyan">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              ORGANIZER ACCESS
-            </Badge>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">
-              Control Room Login
-            </h1>
-            <p className="text-xs text-neutral-400">
-              Manage teams, physical checkpoints, puzzle bank assignments, timing, and public results.
-            </p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="w-12 h-12 rounded-2xl bg-surface-100/90 border border-white/10 flex items-center justify-center p-2 shadow-lg shadow-brand-violet/10">
+                <img src="/logo.svg" alt="CodeChef Logo" className="w-full h-full object-contain" />
+              </div>
+              <Badge variant="cyan">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                ORGANIZER ACCESS
+              </Badge>
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                Control Room Login
+              </h1>
+              <p className="text-xs text-neutral-400 mt-1">
+                Manage teams, physical checkpoints, puzzle bank assignments, timing, and public results.
+              </p>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

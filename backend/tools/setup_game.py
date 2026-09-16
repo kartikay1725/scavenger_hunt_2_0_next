@@ -38,7 +38,7 @@ LOCATIONS = [
     {"code": "LOC-04", "name": "Stationary"},
     {"code": "LOC-05", "name": "Gym"},
     {"code": "LOC-06", "name": "Green Circle — IMR Wala Garden"},
-    {"code": "LOC-07", "name": "Guard Wale Uncle"},
+    {"code": "LOC-07", "name": "Guard Main Gate"},
     {"code": "LOC-08", "name": "Saraswati Mata Murti — A Block"},
     {"code": "LOC-09", "name": "Book Bank"},
     {"code": "LOC-10", "name": "F Block Hawamahal"},

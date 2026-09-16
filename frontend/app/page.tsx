@@ -105,16 +105,16 @@ export default function Home() {
 
   useEffect(() => {
     refresh();
-    // Poll every 8s; on repeated failures back off up to 30s
+    // Poll every 3.5s so teammates see each other's progress and next locations quickly
     const interval = setInterval(() => {
       setNow(Date.now());
-      const delay = Math.min(errorCountRef.current * 5000, 22000);
+      const delay = Math.min(errorCountRef.current * 3000, 15000);
       if (delay > 0) {
         setTimeout(refresh, delay);
       } else {
         refresh();
       }
-    }, 8000);
+    }, 3500);
     return () => clearInterval(interval);
   }, []);
 
@@ -151,7 +151,20 @@ export default function Home() {
         method: "POST",
         body: JSON.stringify({ qr_token: qrToken }),
       });
-      showToast(`Checkpoint verified: ${res.checkpoint?.name || res.checkpoint?.code || ""}`, "success");
+      if (res.already_cleared) {
+        if (res.finished) {
+          showToast("🎉 All 10 checkpoints already completed by your team! Return to base.", "success");
+        } else if (res.next_location_name) {
+          showToast(
+            `✓ Checkpoint already cleared by your teammate! Head to ${res.next_location_name} (${res.next_location_code})`,
+            "info"
+          );
+        } else {
+          showToast(res.message || "✓ Checkpoint already cleared by your teammate!", "info");
+        }
+      } else {
+        showToast(`Checkpoint verified: ${res.checkpoint?.name || res.checkpoint?.code || ""}`, "success");
+      }
       await refresh();
     } catch (e: any) {
       showToast(e.message || "Scan validation failed", "error");
@@ -175,7 +188,12 @@ export default function Home() {
         } else if (res.already_completed) {
           showToast(res.message || "Checkpoint already cleared!", "info");
         } else {
-          showToast("✓ Correct answer! +1 point awarded.", "success");
+          showToast(
+            res.next_location_name
+              ? `✓ Correct! Next checkpoint unlocked: ${res.next_location_name}`
+              : "✓ Correct answer! +1 point awarded.",
+            "success"
+          );
         }
         setAnswer("");
         setHintText("");
@@ -210,8 +228,8 @@ export default function Home() {
         <Navbar />
         <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 py-16 flex items-center justify-center">
           <div className="text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-brand-violet/20 border border-brand-violet/40 flex items-center justify-center mx-auto animate-pulse">
-              <Sparkles className="w-6 h-6 text-brand-violet" />
+            <div className="w-16 h-16 rounded-2xl bg-surface-100/90 border border-white/10 flex items-center justify-center p-2.5 mx-auto animate-pulse shadow-xl shadow-brand-violet/10">
+              <img src="/logo.svg" alt="CodeChef Logo" className="w-full h-full object-contain" />
             </div>
             <h2 className="text-lg font-mono text-neutral-400 tracking-wider">
               CONNECTING TO HUNT ENGINE...
@@ -234,24 +252,24 @@ export default function Home() {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <Navbar gameStatus="RESULTS OUT" />
-        <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-8">
-          <MotionDiv className="text-center space-y-3">
-            <Badge variant="live" className="mx-auto">
+        <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8 w-full">
+          <MotionDiv className="text-center space-y-3 max-w-3xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-emerald/10 border border-brand-emerald/30 text-brand-emerald text-xs font-mono font-bold">
               <Trophy className="w-3.5 h-3.5" />
-              OFFICIAL FINAL LEADERBOARD
-            </Badge>
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight gradient-brand-text">
+              <span>OFFICIAL FINAL LEADERBOARD</span>
+            </div>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight gradient-brand-text">
               The Hunt Has Concluded
             </h1>
-            <p className="text-sm sm:text-base text-neutral-400 max-w-2xl mx-auto">
-              Rankings prioritize full finishers who completed all 10 checkpoints by lowest final calculated time. Disqualified teams are excluded.
+            <p className="text-sm sm:text-base text-neutral-400 leading-relaxed max-w-2xl mx-auto">
+              Rankings prioritize full finishers who completed all 10 checkpoints by lowest final calculated time. Disqualified teams are listed with route elimination notices.
             </p>
           </MotionDiv>
 
           <LeaderboardTable results={results} />
 
-          <div className="text-center py-4 text-xs font-mono text-neutral-500">
-            Please remain in {game.starting_room} until the organizers announce the stage winners.
+          <div className="text-center py-6 text-xs font-mono text-neutral-500 border-t border-white/5 max-w-xl mx-auto">
+            Please remain in <span className="text-neutral-300 font-bold">{game.starting_room}</span> until organizers announce the stage awards.
           </div>
         </main>
       </div>
@@ -276,8 +294,8 @@ export default function Home() {
                 A checkpoint outside of your team's assigned route was scanned. In accordance with Rule 12, the entire team has been eliminated.
               </p>
             </div>
-            <div className="p-4 rounded-2xl bg-black/40 border border-brand-rose/20 text-xs font-mono text-neutral-400">
-              Please return immediately to <b className="text-white">{game.starting_room}</b> and wait there for the event conclusion.
+            <div className="p-4 rounded-2xl bg-black/40 border border-brand-rose/20 text-xs font-mono text-neutral-300 leading-relaxed">
+              Please go back to <b className="text-white">{game.starting_room}</b> and contact OC for re-entering competition if your reason is valid.
             </div>
           </MotionDiv>
         </main>
@@ -331,10 +349,14 @@ export default function Home() {
           /* Join Team Lobby */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <MotionDiv className="lg:col-span-7 space-y-6">
-              <div className="space-y-2">
-                <Badge variant={game.status === "LIVE" ? "live" : "amber"}>
-                  {game.status === "LIVE" ? "GAME IS LIVE" : "LOBBY OPEN"}
-                </Badge>
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-surface-100/80 border border-white/10 shadow-sm backdrop-blur-md">
+                  <img src="/logo.svg" alt="CodeChef Logo" className="w-5 h-5 object-contain" />
+                  <span className="text-xs font-mono font-bold tracking-wider text-neutral-300">CODECHEF HUNT</span>
+                  <Badge variant={game.status === "LIVE" ? "live" : "amber"}>
+                    {game.status === "LIVE" ? "GAME IS LIVE" : "LOBBY OPEN"}
+                  </Badge>
+                </div>
                 <h1 className="text-4xl sm:text-5xl font-black tracking-tight gradient-brand-text">
                   Solve Code.<br />Chase Physical Clues.
                 </h1>
@@ -494,6 +516,11 @@ export default function Home() {
                       </span>
                     ) : me.team?.scanned ? (
                       <span>Checkpoint Verified. Solve the puzzle below!</span>
+                    ) : me.team?.next_location_name ? (
+                      <span>
+                        Head to next checkpoint:{" "}
+                        <span className="text-brand-cyan">{me.team.next_location_name}</span>
+                      </span>
                     ) : (
                       <span>Travel to your next checkpoint and scan its physical QR code.</span>
                     )}
